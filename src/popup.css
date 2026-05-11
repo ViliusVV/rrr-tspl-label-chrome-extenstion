@@ -1,4 +1,4 @@
-body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; min-width: 360px; }
+body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; min-width: 380px; }
 h1 { font-size: 1rem; margin: 0 0 10px; }
 
 fieldset.main {
@@ -51,55 +51,59 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 #status.error { color: #b00020; }
 
 .preview { margin: 6px 0 0; }
-.preview-frame {
+.preview-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 0;
+  margin-bottom: 4px;
+}
+.preview-toolbar button {
+  font-size: 0.78rem;
+  padding: 4px 8px;
+}
+
+.preview-workarea {
   position: relative;
-  width: 320px;
-  max-width: 100%;
-  border: 1px solid #ccc;
+  margin: 0 auto;
   background:
-    repeating-conic-gradient(#f7f7f7 0% 25%, #ffffff 0% 50%)
+    repeating-conic-gradient(#f4f4f4 0% 25%, #ffffff 0% 50%)
     50% / 12px 12px;
-  overflow: hidden;
+  border: 1px solid #ccc;
   touch-action: none;
+  overflow: hidden;
+}
+.label-bounds {
+  position: absolute;
+  border: 2px dashed #999;
+  background: rgba(255, 255, 255, 0.7);
+  box-sizing: border-box;
+  overflow: hidden;
+  pointer-events: none;
 }
 .preview-raster {
   display: block;
   width: 100%;
   height: 100%;
-  position: absolute;
-  inset: 0;
   image-rendering: pixelated;
 }
-.preview-frame.manual .preview-raster { opacity: 0.35; }
-.manual-layer {
+.preview-workarea.manual .preview-raster { opacity: 0.45; }
+
+.manual-svg-wrapper {
   position: absolute;
-  inset: 0;
-  pointer-events: none; /* container is non-interactive; only .manual-svg has handles */
-}
-.manual-svg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  cursor: move;
-  pointer-events: auto;
-  user-select: none;
-  box-sizing: border-box;
   outline: 2px dashed #2563eb;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.18);
+  cursor: move;
   touch-action: none;
+  box-sizing: border-box;
+  overflow: visible;
 }
-.rotate-btn {
+.manual-svg-wrapper[hidden] { display: none; }
+.manual-svg-img {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  padding: 4px 8px;
-  font-size: 0.78rem;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid #999;
-  border-radius: 4px;
-  cursor: pointer;
+  pointer-events: none;
+  user-select: none;
+  display: block;
 }
+
 #previewMsg { font-size: 0.78rem; color: #888; margin: 6px 0 0; min-height: 1em; }
 #previewMsg.error { color: #b00020; }

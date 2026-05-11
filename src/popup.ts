@@ -7,8 +7,8 @@ import { DEFAULTS, loadSettings, saveSettings } from './settings';
 import type { CaptureResult, ManualTransform, Settings } from './types';
 
 const DOTS_PER_MM = 8;
-const PREVIEW_CSS_WIDTH = 320;
-const MIN_MANUAL_WIDTH_FRAC = 0.05; // don't let the user shrink the SVG to nothing
+const PREVIEW_MAX_LABEL_CSS = 220;
+const WORKAREA_PAD = 70;
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -30,9 +30,10 @@ const autoFitField = $<HTMLInputElement>('autoFit');
 
 const statusEl = $('status');
 const previewMsgEl = $('previewMsg');
-const previewFrameEl = $('previewFrame');
+const previewWorkareaEl = $('previewWorkarea');
+const labelBoundsEl = $('labelBounds');
 const previewRasterEl = $<HTMLImageElement>('previewRaster');
-const manualLayerEl = $('manualLayer');
+const manualSvgWrapperEl = $('manualSvgWrapper');
 const manualSvgEl = $<HTMLImageElement>('manualSvg');
 const rotateBtn = $<HTMLButtonElement>('rotateBtn');
 const connectBtn = $<HTMLButtonElement>('connect');
@@ -44,54 +45,178 @@ let saveTimer: number | undefined;
 let previewTimer: number | undefined;
 let cachedCapture: CaptureResult | null = null;
 let previewSeq = 0;
+let currentSettings: Settings = { ...DEFAULTS };
 
-function setStatus(text: string, isError = false): void {
-  statusEl.textContent = text;
-  statusEl.classList.toggle('error', isError);
+// ---------- Layout math ----------
+
+interface FrameDims {
+  labelW: number;     // CSS px
+  labelH: number;
+  pad: number;
+  workareaW: number;
+  workareaH: number;
 }
 
-function setPreviewMsg(text: string, isError = false): void {
-  previewMsgEl.textContent = text;
-  previewMsgEl.classList.toggle('error', isError);
-}
-
-function populateForm(s: Settings): void {
-  numericFields.widthMm.value = String(s.widthMm);
-  numericFields.heightMm.value = String(s.heightMm);
-  numericFields.gapMm.value = String(s.gapMm);
-  numericFields.density.value = String(s.density);
-  numericFields.speed.value = String(s.speed);
-  numericFields.baud.value = String(s.baud);
-  numericFields.threshold.value = String(s.threshold);
-  numericFields.copies.value = String(s.copies);
-  autoFitField.checked = s.autoFit;
-}
-
-function readForm(prev: Settings): Settings {
-  const num = (k: keyof typeof numericFields) =>
-    Number((numericFields[k] as HTMLInputElement | HTMLSelectElement).value);
-  // Manual transform fields aren't directly user-edited via the form — they're
-  // updated by interact.js handlers — so carry them through from prev.
+function frameDims(): FrameDims {
+  const aspect = currentSettings.heightMm / currentSettings.widthMm;
+  let labelW: number;
+  let labelH: number;
+  if (aspect <= 1) {
+    labelW = PREVIEW_MAX_LABEL_CSS;
+    labelH = PREVIEW_MAX_LABEL_CSS * aspect;
+  } else {
+    labelH = PREVIEW_MAX_LABEL_CSS;
+    labelW = PREVIEW_MAX_LABEL_CSS / aspect;
+  }
   return {
-    widthMm: num('widthMm'),
-    heightMm: num('heightMm'),
-    gapMm: num('gapMm'),
-    density: num('density'),
-    speed: num('speed'),
-    baud: num('baud'),
-    threshold: num('threshold'),
-    copies: num('copies'),
-    autoFit: autoFitField.checked,
-    manualRotate: prev.manualRotate,
-    manualX: prev.manualX,
-    manualY: prev.manualY,
-    manualWidth: prev.manualWidth,
+    labelW,
+    labelH,
+    pad: WORKAREA_PAD,
+    workareaW: labelW + 2 * WORKAREA_PAD,
+    workareaH: labelH + 2 * WORKAREA_PAD,
   };
 }
 
-let currentSettings: Settings = { ...DEFAULTS };
+function applyFrameSize(): void {
+  const d = frameDims();
+  previewWorkareaEl.style.width = `${d.workareaW}px`;
+  previewWorkareaEl.style.height = `${d.workareaH}px`;
+  labelBoundsEl.style.width = `${d.labelW}px`;
+  labelBoundsEl.style.height = `${d.labelH}px`;
+  labelBoundsEl.style.left = `${d.pad}px`;
+  labelBoundsEl.style.top = `${d.pad}px`;
+  applyManualLayoutFromSettings();
+}
 
-// ---------- Capture ----------
+function applyManualLayoutFromSettings(): void {
+  if (!cachedCapture || !cachedCapture.ok) return;
+  const d = frameDims();
+  const wCss = currentSettings.manualWidth * d.labelW;
+  const hCss = currentSettings.manualHeight * d.labelH;
+  const xCss = d.pad + currentSettings.manualX * d.labelW;
+  const yCss = d.pad + currentSettings.manualY * d.labelH;
+  manualSvgWrapperEl.style.width = `${wCss}px`;
+  manualSvgWrapperEl.style.height = `${hCss}px`;
+  manualSvgWrapperEl.style.left = `${xCss}px`;
+  manualSvgWrapperEl.style.top = `${yCss}px`;
+  applyImgTransform(wCss, hCss);
+}
+
+function applyImgTransform(wCss: number, hCss: number): void {
+  if (currentSettings.manualRotate) {
+    // Wrapper is at (wCss x hCss); we want the SVG content rotated 90° inside it.
+    // Sizing the img to (hCss x wCss) and rotating 90° around centre maps it back
+    // to fit (wCss x hCss) visually with rotated SVG content.
+    manualSvgEl.style.width = `${hCss}px`;
+    manualSvgEl.style.height = `${wCss}px`;
+    manualSvgEl.style.left = '50%';
+    manualSvgEl.style.top = '50%';
+    manualSvgEl.style.transformOrigin = 'center center';
+    manualSvgEl.style.transform = 'translate(-50%, -50%) rotate(90deg)';
+  } else {
+    manualSvgEl.style.width = `${wCss}px`;
+    manualSvgEl.style.height = `${hCss}px`;
+    manualSvgEl.style.left = '0';
+    manualSvgEl.style.top = '0';
+    manualSvgEl.style.transform = 'none';
+  }
+}
+
+function cssRectToManual(left: number, top: number, width: number, height: number) {
+  const d = frameDims();
+  return {
+    manualX: (left - d.pad) / d.labelW,
+    manualY: (top - d.pad) / d.labelH,
+    manualWidth: width / d.labelW,
+    manualHeight: height / d.labelH,
+  };
+}
+
+// ---------- SVG image source ----------
+
+function svgStringToDataUrl(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return `data:image/svg+xml;base64,${btoa(bin)}`;
+}
+
+function updateManualSvgImage(): void {
+  if (!cachedCapture || !cachedCapture.ok) return;
+  manualSvgEl.src = svgStringToDataUrl(cachedCapture.svgString);
+}
+
+// ---------- interact.js ----------
+
+let interactInstalled = false;
+function installInteractHandlers(): void {
+  if (interactInstalled) return;
+  interactInstalled = true;
+  interact(manualSvgWrapperEl)
+    .draggable({
+      listeners: {
+        move(event) {
+          const newLeft = manualSvgWrapperEl.offsetLeft + event.dx;
+          const newTop = manualSvgWrapperEl.offsetTop + event.dy;
+          manualSvgWrapperEl.style.left = `${newLeft}px`;
+          manualSvgWrapperEl.style.top = `${newTop}px`;
+          const m = cssRectToManual(
+            newLeft,
+            newTop,
+            manualSvgWrapperEl.offsetWidth,
+            manualSvgWrapperEl.offsetHeight,
+          );
+          currentSettings.manualX = m.manualX;
+          currentSettings.manualY = m.manualY;
+          scheduleSave();
+          schedulePreview();
+        },
+      },
+    })
+    .resizable({
+      edges: { left: true, right: true, top: true, bottom: true },
+      margin: 12,
+      modifiers: [
+        interact.modifiers.aspectRatio({ ratio: 'preserve' }),
+        interact.modifiers.restrictSize({ min: { width: 24, height: 12 } }),
+      ],
+      listeners: {
+        move(event) {
+          const newWidth = event.rect.width;
+          const newHeight = event.rect.height;
+          const newLeft = manualSvgWrapperEl.offsetLeft + event.deltaRect.left;
+          const newTop = manualSvgWrapperEl.offsetTop + event.deltaRect.top;
+          manualSvgWrapperEl.style.width = `${newWidth}px`;
+          manualSvgWrapperEl.style.height = `${newHeight}px`;
+          manualSvgWrapperEl.style.left = `${newLeft}px`;
+          manualSvgWrapperEl.style.top = `${newTop}px`;
+          applyImgTransform(newWidth, newHeight);
+          const m = cssRectToManual(newLeft, newTop, newWidth, newHeight);
+          currentSettings.manualX = m.manualX;
+          currentSettings.manualY = m.manualY;
+          currentSettings.manualWidth = m.manualWidth;
+          currentSettings.manualHeight = m.manualHeight;
+          scheduleSave();
+          schedulePreview();
+        },
+      },
+    });
+}
+
+// ---------- Mode toggle ----------
+
+function setManualMode(enabled: boolean): void {
+  manualSvgWrapperEl.hidden = !enabled;
+  rotateBtn.hidden = !enabled;
+  previewWorkareaEl.classList.toggle('manual', enabled);
+  if (enabled) {
+    updateManualSvgImage();
+    installInteractHandlers();
+    applyManualLayoutFromSettings();
+  }
+}
+
+// ---------- Capture & preview ----------
 
 async function captureFromActiveTab(): Promise<CaptureResult> {
   try {
@@ -109,141 +234,13 @@ async function captureFromActiveTab(): Promise<CaptureResult> {
   }
 }
 
-// ---------- Preview frame sizing ----------
-
-function frameDims(): { w: number; h: number } {
-  const w = PREVIEW_CSS_WIDTH;
-  const aspect = currentSettings.heightMm / currentSettings.widthMm;
-  const h = Math.max(40, w * aspect);
-  return { w, h };
-}
-
-function applyFrameSize(): void {
-  const { w, h } = frameDims();
-  previewFrameEl.style.width = `${w}px`;
-  previewFrameEl.style.height = `${h}px`;
-}
-
-// ---------- Manual layer (SVG with interact.js handles) ----------
-
-function svgEffDims(): { effW: number; effH: number } {
-  if (!cachedCapture || !cachedCapture.ok) return { effW: 1, effH: 1 };
-  if (currentSettings.manualRotate) {
-    return { effW: cachedCapture.svgHeight, effH: cachedCapture.svgWidth };
-  }
-  return { effW: cachedCapture.svgWidth, effH: cachedCapture.svgHeight };
-}
-
-function manualHeightFrac(): number {
-  // height fraction in label-height units, derived from current width fraction
-  // and SVG effective aspect ratio.
-  const { effW, effH } = svgEffDims();
-  const aspect = effH / effW;
-  // width-in-label-dots = manualWidth * labelDotsW
-  // height-in-label-dots = width-in-label-dots * aspect
-  // labelDotsH cancels label dimensions cleanly when normalised:
-  const labelAspect = currentSettings.heightMm / currentSettings.widthMm;
-  return (currentSettings.manualWidth * aspect) / labelAspect;
-}
-
-function applyManualLayoutFromSettings(): void {
-  if (!cachedCapture || !cachedCapture.ok) return;
-  const { w, h } = frameDims();
-  const wCss = currentSettings.manualWidth * w;
-  const hCss = manualHeightFrac() * h;
-  const xCss = currentSettings.manualX * w;
-  const yCss = currentSettings.manualY * h;
-  manualSvgEl.style.width = `${wCss}px`;
-  manualSvgEl.style.height = `${hCss}px`;
-  manualSvgEl.style.left = `${xCss}px`;
-  manualSvgEl.style.top = `${yCss}px`;
-  manualSvgEl.style.transform = currentSettings.manualRotate ? 'rotate(90deg)' : 'none';
-  manualSvgEl.style.transformOrigin = 'center center';
-}
-
-function updateManualSvgImage(): void {
-  if (!cachedCapture || !cachedCapture.ok) return;
-  const dataUrl = svgStringToDataUrl(cachedCapture.svgString);
-  manualSvgEl.src = dataUrl;
-}
-
-function svgStringToDataUrl(s: string): string {
-  const bytes = new TextEncoder().encode(s);
-  let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return `data:image/svg+xml;base64,${btoa(bin)}`;
-}
-
-let interactInstalled = false;
-function installInteractHandlers(): void {
-  if (interactInstalled) return;
-  interactInstalled = true;
-  interact(manualSvgEl)
-    .draggable({
-      listeners: {
-        move(event) {
-          const { w, h } = frameDims();
-          const newLeft = manualSvgEl.offsetLeft + event.dx;
-          const newTop = manualSvgEl.offsetTop + event.dy;
-          manualSvgEl.style.left = `${newLeft}px`;
-          manualSvgEl.style.top = `${newTop}px`;
-          currentSettings.manualX = newLeft / w;
-          currentSettings.manualY = newTop / h;
-          scheduleSave();
-          schedulePreview();
-        },
-      },
-    })
-    .resizable({
-      edges: { left: true, right: true, top: true, bottom: true },
-      modifiers: [
-        interact.modifiers.aspectRatio({
-          ratio: 'preserve',
-        }),
-        interact.modifiers.restrictSize({
-          min: { width: PREVIEW_CSS_WIDTH * MIN_MANUAL_WIDTH_FRAC, height: 10 },
-        }),
-      ],
-      listeners: {
-        move(event) {
-          const { w, h } = frameDims();
-          const newWidth = event.rect.width;
-          const newHeight = event.rect.height;
-          const newLeft = manualSvgEl.offsetLeft + event.deltaRect.left;
-          const newTop = manualSvgEl.offsetTop + event.deltaRect.top;
-          manualSvgEl.style.width = `${newWidth}px`;
-          manualSvgEl.style.height = `${newHeight}px`;
-          manualSvgEl.style.left = `${newLeft}px`;
-          manualSvgEl.style.top = `${newTop}px`;
-          currentSettings.manualWidth = newWidth / w;
-          currentSettings.manualX = newLeft / w;
-          currentSettings.manualY = newTop / h;
-          scheduleSave();
-          schedulePreview();
-        },
-      },
-    });
-}
-
-function setManualMode(enabled: boolean): void {
-  manualLayerEl.hidden = !enabled;
-  rotateBtn.hidden = !enabled;
-  previewFrameEl.classList.toggle('manual', enabled);
-  if (enabled) {
-    updateManualSvgImage();
-    installInteractHandlers();
-    applyManualLayoutFromSettings();
-  }
-}
-
-// ---------- Background rasterise (for preview-raster img) ----------
-
 function currentManualTransform(): ManualTransform {
   return {
     rotate: currentSettings.manualRotate,
     x: currentSettings.manualX,
     y: currentSettings.manualY,
     width: currentSettings.manualWidth,
+    height: currentSettings.manualHeight,
   };
 }
 
@@ -305,12 +302,52 @@ function schedulePreview(): void {
   }, 150);
 }
 
-// ---------- Form / mode handlers ----------
+// ---------- UI helpers ----------
+
+function setStatus(text: string, isError = false): void {
+  statusEl.textContent = text;
+  statusEl.classList.toggle('error', isError);
+}
+
+function setPreviewMsg(text: string, isError = false): void {
+  previewMsgEl.textContent = text;
+  previewMsgEl.classList.toggle('error', isError);
+}
+
+function populateForm(s: Settings): void {
+  numericFields.widthMm.value = String(s.widthMm);
+  numericFields.heightMm.value = String(s.heightMm);
+  numericFields.gapMm.value = String(s.gapMm);
+  numericFields.density.value = String(s.density);
+  numericFields.speed.value = String(s.speed);
+  numericFields.baud.value = String(s.baud);
+  numericFields.threshold.value = String(s.threshold);
+  numericFields.copies.value = String(s.copies);
+  autoFitField.checked = s.autoFit;
+}
+
+function readFormInto(s: Settings): Settings {
+  const num = (k: keyof typeof numericFields) =>
+    Number((numericFields[k] as HTMLInputElement | HTMLSelectElement).value);
+  return {
+    ...s,
+    widthMm: num('widthMm'),
+    heightMm: num('heightMm'),
+    gapMm: num('gapMm'),
+    density: num('density'),
+    speed: num('speed'),
+    baud: num('baud'),
+    threshold: num('threshold'),
+    copies: num('copies'),
+    autoFit: autoFitField.checked,
+  };
+}
+
+// ---------- Event handlers ----------
 
 function onFormChange(): void {
-  currentSettings = readForm(currentSettings);
+  currentSettings = readFormInto(currentSettings);
   applyFrameSize();
-  if (!currentSettings.autoFit) applyManualLayoutFromSettings();
   scheduleSave();
   schedulePreview();
 }
@@ -320,11 +357,11 @@ function onAutoFitToggle(): void {
   currentSettings.autoFit = autoFitField.checked;
 
   if (becameManual && cachedCapture && cachedCapture.ok) {
-    // First-time-off this session: if the user hasn't established a manual frame yet
-    // (defaults all 0 / width 1 left from DEFAULTS or previous full-fit), seed it
-    // from the auto-fit result so the SVG starts in a sane place to drag from.
+    // First time going manual this session, OR previously-stored manual values
+    // look like defaults — seed from auto-fit so the SVG starts in a sane place.
     const looksLikeDefault =
       currentSettings.manualWidth === DEFAULTS.manualWidth &&
+      currentSettings.manualHeight === DEFAULTS.manualHeight &&
       currentSettings.manualX === DEFAULTS.manualX &&
       currentSettings.manualY === DEFAULTS.manualY &&
       currentSettings.manualRotate === DEFAULTS.manualRotate;
@@ -341,6 +378,7 @@ function onAutoFitToggle(): void {
       currentSettings.manualX = seed.x;
       currentSettings.manualY = seed.y;
       currentSettings.manualWidth = seed.width;
+      currentSettings.manualHeight = seed.height;
     }
   }
 
@@ -350,6 +388,17 @@ function onAutoFitToggle(): void {
 }
 
 function onRotateClick(): void {
+  // Swap effective W/H so the visual roughly stays in the same on-screen footprint:
+  //   oldHCss = manualHeight * labelHCss
+  //   newWCss := oldHCss
+  //   newManualWidth = newWCss / labelWCss = manualHeight * labelHCss / labelWCss
+  //                  = manualHeight * (heightMm / widthMm)
+  // Symmetric for newManualHeight.
+  const labelAspect = currentSettings.heightMm / currentSettings.widthMm;
+  const newWidth = currentSettings.manualHeight * labelAspect;
+  const newHeight = currentSettings.manualWidth / labelAspect;
+  currentSettings.manualWidth = newWidth;
+  currentSettings.manualHeight = newHeight;
   currentSettings.manualRotate = !currentSettings.manualRotate;
   applyManualLayoutFromSettings();
   scheduleSave();

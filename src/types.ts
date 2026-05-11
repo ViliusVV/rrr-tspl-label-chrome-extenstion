@@ -9,16 +9,18 @@ export interface Settings {
   copies: number;    // >= 1
   autoFit: boolean;  // true = auto rotate/scale/center; false = use manual transform
   manualRotate: boolean; // 90° rotation in manual mode
-  manualX: number;   // normalised [-..] fraction of label width
+  manualX: number;   // normalised fraction of label width (may be <0 or >1 when cropping)
   manualY: number;   // normalised fraction of label height
-  manualWidth: number; // normalised fraction of label width (height derived from SVG aspect)
+  manualWidth: number;  // normalised — SVG effective width as fraction of label width
+  manualHeight: number; // normalised — SVG effective height as fraction of label height
 }
 
 export interface ManualTransform {
   rotate: boolean;
-  x: number;     // normalised [0..1] (fraction of label width) — can fall outside [0,1] when cropping
-  y: number;     // normalised [0..1] (fraction of label height)
-  width: number; // normalised — SVG effective width as fraction of label width
+  x: number;      // normalised, fraction of label width
+  y: number;      // normalised, fraction of label height
+  width: number;  // normalised, SVG effective width as fraction of label width
+  height: number; // normalised, SVG effective height as fraction of label height
 }
 
 export type CaptureResult =

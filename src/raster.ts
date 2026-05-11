@@ -82,14 +82,14 @@ export async function rasterize(input: RasterInput): Promise<RasterResult> {
 
   if (manual) {
     // Manual transform: user-controlled scale + offset + rotation.
-    const effW = manual.rotate ? svgHeight : svgWidth;
-    const effH = manual.rotate ? svgWidth : svgHeight;
     const drawW = manual.width * labelDotsW;
-    const drawH = drawW * (effH / effW);
+    const drawH = manual.height * labelDotsH;
     const dx = manual.x * labelDotsW;
     const dy = manual.y * labelDotsH;
 
     if (manual.rotate) {
+      // Draw the SVG into the (drawW x drawH) region rotated 90° clockwise.
+      // After translate to top-right of target + rotate(π/2), local axes swap with physical.
       ctx.save();
       ctx.translate(dx + drawW, dy);
       ctx.rotate(Math.PI / 2);
@@ -144,6 +144,7 @@ export function manualDefaultsFromAutoFit(
     x: fit.dx / labelDotsW,
     y: fit.dy / labelDotsH,
     width: fit.drawW / labelDotsW,
+    height: fit.drawH / labelDotsH,
   };
 }
 

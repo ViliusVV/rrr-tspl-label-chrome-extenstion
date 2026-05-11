@@ -14,6 +14,7 @@ export const DEFAULTS: Settings = {
   manualX: 0,
   manualY: 0,
   manualWidth: 1,
+  manualHeight: 1,
 };
 
 const KEY = 'settings';
