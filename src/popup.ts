@@ -30,12 +30,14 @@ const autoFitField = $<HTMLInputElement>('autoFit');
 
 const statusEl = $('status');
 const previewMsgEl = $('previewMsg');
+const previewViewportEl = $('previewViewport');
 const previewWorkareaEl = $('previewWorkarea');
 const labelBoundsEl = $('labelBounds');
 const previewRasterEl = $<HTMLImageElement>('previewRaster');
 const manualSvgWrapperEl = $('manualSvgWrapper');
 const manualSvgEl = $<HTMLImageElement>('manualSvg');
 const rotateBtn = $<HTMLButtonElement>('rotateBtn');
+const resetViewBtn = $<HTMLButtonElement>('resetViewBtn');
 const connectBtn = $<HTMLButtonElement>('connect');
 const changePortBtn = $<HTMLButtonElement>('changePort');
 const printBtn = $<HTMLButtonElement>('print');
@@ -46,6 +48,13 @@ let previewTimer: number | undefined;
 let cachedCapture: CaptureResult | null = null;
 let previewSeq = 0;
 let currentSettings: Settings = { ...DEFAULTS };
+
+// Viewport state (in-memory only; not persisted across popup opens).
+let viewportScale = 1;
+let viewportTX = 0;
+let viewportTY = 0;
+const VIEWPORT_MIN_SCALE = 0.25;
+const VIEWPORT_MAX_SCALE = 8;
 
 // ---------- Layout math ----------
 
@@ -79,6 +88,10 @@ function frameDims(): FrameDims {
 
 function applyFrameSize(): void {
   const d = frameDims();
+  // Viewport (the clipping window) and workarea both natively at workarea size.
+  // Viewport stays fixed; workarea gets the CSS transform for zoom/pan.
+  previewViewportEl.style.width = `${d.workareaW}px`;
+  previewViewportEl.style.height = `${d.workareaH}px`;
   previewWorkareaEl.style.width = `${d.workareaW}px`;
   previewWorkareaEl.style.height = `${d.workareaH}px`;
   labelBoundsEl.style.width = `${d.labelW}px`;
@@ -86,6 +99,78 @@ function applyFrameSize(): void {
   labelBoundsEl.style.left = `${d.pad}px`;
   labelBoundsEl.style.top = `${d.pad}px`;
   applyManualLayoutFromSettings();
+  applyViewportTransform();
+}
+
+function applyViewportTransform(): void {
+  previewWorkareaEl.style.transform = `translate(${viewportTX}px, ${viewportTY}px) scale(${viewportScale})`;
+}
+
+function resetViewport(): void {
+  viewportScale = 1;
+  viewportTX = 0;
+  viewportTY = 0;
+  applyViewportTransform();
+}
+
+function viewportPointFromEvent(e: MouseEvent | WheelEvent): { x: number; y: number } {
+  const rect = previewViewportEl.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function onWheel(e: WheelEvent): void {
+  e.preventDefault();
+  // Zoom anchored to the mouse position so the point under the cursor stays put.
+  const p = viewportPointFromEvent(e);
+  const workX = (p.x - viewportTX) / viewportScale;
+  const workY = (p.y - viewportTY) / viewportScale;
+
+  const zoomStep = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  const newScale = Math.max(
+    VIEWPORT_MIN_SCALE,
+    Math.min(VIEWPORT_MAX_SCALE, viewportScale * zoomStep),
+  );
+  if (newScale === viewportScale) return;
+  viewportScale = newScale;
+  viewportTX = p.x - workX * viewportScale;
+  viewportTY = p.y - workY * viewportScale;
+  applyViewportTransform();
+}
+
+// Middle-mouse-button pan.
+let panning = false;
+let panStartX = 0;
+let panStartY = 0;
+let panStartTX = 0;
+let panStartTY = 0;
+
+function onViewportMouseDown(e: MouseEvent): void {
+  if (e.button !== 1) return;
+  e.preventDefault();
+  panning = true;
+  panStartX = e.clientX;
+  panStartY = e.clientY;
+  panStartTX = viewportTX;
+  panStartTY = viewportTY;
+  previewViewportEl.classList.add('panning');
+}
+
+function onWindowMouseMove(e: MouseEvent): void {
+  if (!panning) return;
+  viewportTX = panStartTX + (e.clientX - panStartX);
+  viewportTY = panStartTY + (e.clientY - panStartY);
+  applyViewportTransform();
+}
+
+function onWindowMouseUp(e: MouseEvent): void {
+  if (e.button !== 1 || !panning) return;
+  panning = false;
+  previewViewportEl.classList.remove('panning');
+}
+
+// Prevent the browser's default middle-click autoscroll (the scrolling cursor).
+function onViewportAuxClick(e: MouseEvent): void {
+  if (e.button === 1) e.preventDefault();
 }
 
 function applyManualLayoutFromSettings(): void {
@@ -180,8 +265,10 @@ function installInteractHandlers(): void {
           previewWorkareaEl.classList.add('editing');
         },
         move(event) {
-          const newLeft = manualSvgWrapperEl.offsetLeft + event.dx;
-          const newTop = manualSvgWrapperEl.offsetTop + event.dy;
+          // interact reports deltas in screen pixels. Workarea is CSS-scaled by
+          // viewportScale, so 1 screen px = 1/viewportScale workarea px.
+          const newLeft = manualSvgWrapperEl.offsetLeft + event.dx / viewportScale;
+          const newTop = manualSvgWrapperEl.offsetTop + event.dy / viewportScale;
           manualSvgWrapperEl.style.left = `${newLeft}px`;
           manualSvgWrapperEl.style.top = `${newTop}px`;
           const m = cssRectToManual(
@@ -212,10 +299,15 @@ function installInteractHandlers(): void {
           previewWorkareaEl.classList.add('editing');
         },
         move(event) {
-          const newWidth = event.rect.width;
-          const newHeight = event.rect.height;
-          const newLeft = manualSvgWrapperEl.offsetLeft + event.deltaRect.left;
-          const newTop = manualSvgWrapperEl.offsetTop + event.deltaRect.top;
+          // All rect/delta values are in screen pixels under viewport scale.
+          const dLeft = event.deltaRect.left / viewportScale;
+          const dTop = event.deltaRect.top / viewportScale;
+          const dW = event.deltaRect.width / viewportScale;
+          const dH = event.deltaRect.height / viewportScale;
+          const newLeft = manualSvgWrapperEl.offsetLeft + dLeft;
+          const newTop = manualSvgWrapperEl.offsetTop + dTop;
+          const newWidth = manualSvgWrapperEl.offsetWidth + dW;
+          const newHeight = manualSvgWrapperEl.offsetHeight + dH;
           manualSvgWrapperEl.style.width = `${newWidth}px`;
           manualSvgWrapperEl.style.height = `${newHeight}px`;
           manualSvgWrapperEl.style.left = `${newLeft}px`;
@@ -534,9 +626,19 @@ async function init(): Promise<void> {
   }
   autoFitField.addEventListener('change', onAutoFitToggle);
   rotateBtn.addEventListener('click', onRotateClick);
+  resetViewBtn.addEventListener('click', resetViewport);
   connectBtn.addEventListener('click', onConnect);
   changePortBtn.addEventListener('click', onConnect);
   printBtn.addEventListener('click', onPrint);
+
+  // Viewport controls: wheel to zoom, middle-mouse drag to pan.
+  previewViewportEl.addEventListener('wheel', onWheel, { passive: false });
+  previewViewportEl.addEventListener('mousedown', onViewportMouseDown);
+  previewViewportEl.addEventListener('auxclick', onViewportAuxClick);
+  // Listen on window for move/up so panning works even if the cursor leaves the
+  // viewport during a fast drag.
+  window.addEventListener('mousemove', onWindowMouseMove);
+  window.addEventListener('mouseup', onWindowMouseUp);
 
   await refreshPortState();
 

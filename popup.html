@@ -50,14 +50,17 @@
 
   <div class="preview">
     <div class="preview-toolbar">
+      <button id="resetViewBtn" type="button" title="Reset zoom and pan">100%</button>
       <button id="rotateBtn" type="button" hidden title="Rotate 90°">⟳ Rotate 90°</button>
     </div>
-    <div class="preview-workarea" id="previewWorkarea">
-      <div class="label-bounds" id="labelBounds">
-        <img class="preview-raster" id="previewRaster" alt="Rasterised preview" />
-      </div>
-      <div class="manual-svg-wrapper" id="manualSvgWrapper" hidden>
-        <img class="manual-svg-img" id="manualSvg" alt="" draggable="false" />
+    <div class="preview-viewport" id="previewViewport">
+      <div class="preview-workarea" id="previewWorkarea">
+        <div class="label-bounds" id="labelBounds">
+          <img class="preview-raster" id="previewRaster" alt="Rasterised preview" />
+        </div>
+        <div class="manual-svg-wrapper" id="manualSvgWrapper" hidden>
+          <img class="manual-svg-img" id="manualSvg" alt="" draggable="false" />
+        </div>
       </div>
     </div>
     <p id="previewMsg"></p>

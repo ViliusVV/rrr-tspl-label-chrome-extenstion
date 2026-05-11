@@ -54,6 +54,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .preview-toolbar {
   display: flex;
   justify-content: flex-end;
+  gap: 6px;
   min-height: 0;
   margin-bottom: 4px;
 }
@@ -62,15 +63,24 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   padding: 4px 8px;
 }
 
-.preview-workarea {
+.preview-viewport {
   position: relative;
   margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #ccc;
   background:
     repeating-conic-gradient(#f4f4f4 0% 25%, #ffffff 0% 50%)
     50% / 12px 12px;
-  border: 1px solid #ccc;
   touch-action: none;
-  overflow: hidden;
+}
+.preview-viewport.panning { cursor: grabbing; }
+
+.preview-workarea {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  touch-action: none;
 }
 .label-bounds {
   position: absolute;
