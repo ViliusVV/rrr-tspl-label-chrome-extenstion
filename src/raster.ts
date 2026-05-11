@@ -1,4 +1,4 @@
-import type { FitRect } from './types';
+import type { FitRect, RasterInput, RasterResult } from './types';
 
 export function computeFitRect(
   svgW: number,
@@ -52,4 +52,67 @@ export function packPixelsToBitmap(
     }
   }
   return { bits, widthBytes, height };
+}
+
+function utf8ToBase64(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
+async function loadSvgImage(svgString: string): Promise<HTMLImageElement> {
+  const dataUrl = `data:image/svg+xml;base64,${utf8ToBase64(svgString)}`;
+  const img = new Image();
+  img.src = dataUrl;
+  await img.decode();
+  return img;
+}
+
+export async function rasterize(input: RasterInput): Promise<RasterResult> {
+  const { svgString, svgWidth, svgHeight, labelDotsW, labelDotsH, threshold } = input;
+  const fit = computeFitRect(svgWidth, svgHeight, labelDotsW, labelDotsH);
+  const img = await loadSvgImage(svgString);
+
+  const canvas = new OffscreenCanvas(labelDotsW, labelDotsH);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('OffscreenCanvas 2D context unavailable');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, labelDotsW, labelDotsH);
+  ctx.imageSmoothingEnabled = false;
+
+  if (fit.rotate) {
+    ctx.save();
+    ctx.translate(labelDotsW, 0);
+    ctx.rotate(Math.PI / 2);
+    // In the rotated frame, local x maps to physical y, local y maps to physical -x.
+    // To place a centred drawW x drawH rect in physical space, in local coords that's
+    // origin (dy, dx) with extents (drawH, drawW).
+    ctx.drawImage(img, fit.dy, fit.dx, fit.drawH, fit.drawW);
+    ctx.restore();
+  } else {
+    ctx.drawImage(img, fit.dx, fit.dy, fit.drawW, fit.drawH);
+  }
+
+  const imageData = ctx.getImageData(0, 0, labelDotsW, labelDotsH);
+  const packed = packPixelsToBitmap(imageData.data, labelDotsW, labelDotsH, threshold);
+
+  const previewBlob = await canvas.convertToBlob({ type: 'image/png' });
+  const previewDataUrl = await blobToDataUrl(previewBlob);
+
+  return {
+    bits: packed.bits,
+    widthBytes: packed.widthBytes,
+    height: packed.height,
+    previewDataUrl,
+  };
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result as string);
+    fr.onerror = () => reject(fr.error ?? new Error('FileReader error'));
+    fr.readAsDataURL(blob);
+  });
 }
