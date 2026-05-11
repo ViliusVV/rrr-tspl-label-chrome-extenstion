@@ -8,15 +8,25 @@ export async function getOrRequestPort(opts: { prompt: boolean }): Promise<Seria
   if (!('serial' in navigator)) {
     throw new Error('Web Serial is not available in this browser');
   }
-  const existing = await navigator.serial.getPorts();
-  if (existing.length > 0) return existing[0];
-  if (!opts.prompt) return null;
-  try {
-    return await navigator.serial.requestPort();
-  } catch {
-    // User dismissed the picker.
-    return null;
+  if (opts.prompt) {
+    // Call requestPort synchronously after the user click — no intervening awaits.
+    // Awaiting getPorts() first can invalidate the transient user activation in MV3
+    // popups, causing requestPort to reject with NotAllowedError without showing the
+    // picker. Skip the getPorts() pre-check on the explicit-prompt path entirely.
+    try {
+      return await navigator.serial.requestPort();
+    } catch (e) {
+      const err = e as { name?: string; message?: string };
+      // User cancelled the picker — silent null.
+      if (err.name === 'NotFoundError') return null;
+      // Anything else (NotAllowedError, SecurityError, etc.) is a real failure —
+      // surface it so the popup status can show what actually broke.
+      console.warn('navigator.serial.requestPort rejected:', e);
+      throw e;
+    }
   }
+  const existing = await navigator.serial.getPorts();
+  return existing.length > 0 ? existing[0] : null;
 }
 
 export async function sendBytes(
