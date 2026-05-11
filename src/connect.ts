@@ -11,10 +11,15 @@ btn.addEventListener('click', async () => {
   setMsg('');
   btn.disabled = true;
   try {
-    const port = await navigator.serial.requestPort();
-    console.log('[connect] port granted:', port);
-    setMsg('Connected. Closing window…', 'ok');
-    setTimeout(() => window.close(), 1200);
+    await navigator.serial.requestPort();
+    setMsg('Connected. Closing tab…', 'ok');
+    setTimeout(() => {
+      try {
+        window.close();
+      } catch {
+        setMsg('Connected. You can close this tab.', 'ok');
+      }
+    }, 900);
   } catch (e) {
     const err = e as { name?: string; message?: string };
     if (err.name === 'NotFoundError') {
@@ -25,3 +30,5 @@ btn.addEventListener('click', async () => {
     btn.disabled = false;
   }
 });
+
+btn.focus();

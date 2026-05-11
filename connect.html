@@ -3,20 +3,69 @@
 <head>
   <meta charset="UTF-8" />
   <title>Connect printer</title>
-  <link rel="stylesheet" href="/src/popup.css" />
   <style>
-    body { min-width: 320px; }
-    main { padding: 4px 0; }
-    p { font-size: 0.85rem; color: #444; margin: 0 0 10px; }
-    #msg { min-height: 1.2em; }
-    #msg.error { color: #b00020; }
-    #msg.ok { color: #1b5e20; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f5f6f8;
+      color: #1f2937;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    main {
+      background: #fff;
+      max-width: 460px;
+      width: 100%;
+      padding: 32px 36px;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.35rem;
+      margin: 0 0 12px;
+      font-weight: 600;
+    }
+    p {
+      font-size: 0.95rem;
+      line-height: 1.5;
+      color: #4b5563;
+      margin: 0 0 24px;
+    }
+    button {
+      font-size: 1rem;
+      font-weight: 500;
+      padding: 12px 28px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button:hover:not(:disabled) { background: #1d4ed8; }
+    button:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
+    #msg {
+      min-height: 1.4em;
+      margin: 18px 0 0;
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+    #msg.error { color: #b91c1c; }
+    #msg.ok { color: #047857; }
   </style>
 </head>
 <body>
 <main>
-  <h1>Connect printer</h1>
-  <p>Click the button below, then pick your printer's COM port from the system dialog.</p>
+  <h1>Connect your printer</h1>
+  <p>Click below, then pick your printer's COM port from the system dialog. The tab will close itself after you connect.</p>
   <button id="pick" type="button">Pick port</button>
   <p id="msg"></p>
 </main>

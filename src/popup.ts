@@ -83,12 +83,11 @@ async function refreshPortState(): Promise<void> {
 }
 
 async function onConnect(): Promise<void> {
-  // Open the connect page as a real Chrome tab — the most permissive surface for
-  // Web Serial's permission picker. Earlier attempts (popup, chrome.windows.create
-  // popup-type window) both saw Chrome reject the picker silently.
+  // Open the connect page as a real Chrome tab — the only extension surface where
+  // Chrome will host the Web Serial picker. The popup will dismiss as focus moves
+  // to the new tab; no point updating its status (it won't render in time).
   try {
     await chrome.tabs.create({ url: chrome.runtime.getURL('connect.html') });
-    setStatus('Pick the COM port in the tab that just opened, then reopen this popup.');
   } catch (e) {
     setStatus(`Could not open connect tab: ${(e as Error).message}`, true);
     console.error(e);
