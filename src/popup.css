@@ -1,13 +1,62 @@
-body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; min-width: 340px; }
-h1 { font-size: 1rem; margin: 0 0 8px; }
-fieldset { border: 1px solid #ddd; border-radius: 4px; margin: 0 0 8px; padding: 6px 8px; }
-legend { font-size: 0.75rem; color: #666; padding: 0 4px; }
-label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.85rem; margin: 4px 0; }
+body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; min-width: 360px; }
+h1 { font-size: 1rem; margin: 0 0 10px; }
+
+fieldset.main {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin: 0 0 8px;
+  padding: 6px 8px;
+}
+
+details.advanced {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin: 0 0 8px;
+  background: #fafafa;
+}
+details.advanced summary {
+  font-size: 0.8rem;
+  color: #555;
+  padding: 6px 8px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+details.advanced summary::before { content: '▸ '; color: #888; }
+details.advanced[open] summary::before { content: '▾ '; }
+details.advanced[open] summary { border-bottom: 1px solid #e5e5e5; }
+details.advanced .advanced-body { padding: 6px 8px; }
+details.advanced .advanced-body button {
+  margin-top: 6px;
+  width: 100%;
+}
+
+label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  margin: 4px 0;
+}
 input[type="number"], select { width: 90px; }
+
 .actions { display: flex; gap: 8px; margin: 8px 0; }
+.actions button { flex: 1; padding: 8px 10px; font-size: 0.9rem; }
 button { padding: 6px 10px; font-size: 0.85rem; cursor: pointer; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+
 #status { font-size: 0.8rem; color: #444; margin: 8px 0 4px; min-height: 1.2em; }
 #status.error { color: #b00020; }
-#preview { display: block; max-width: 100%; image-rendering: pixelated; border: 1px solid #eee; background: #fafafa; }
+
+.preview { margin: 6px 0 0; }
+#preview {
+  display: block;
+  max-width: 100%;
+  image-rendering: pixelated;
+  border: 1px solid #eee;
+  background: #fafafa;
+}
 #preview:not([src]) { display: none; }
+#previewMsg { font-size: 0.78rem; color: #888; margin: 6px 0 0; min-height: 1em; }
+#previewMsg.error { color: #b00020; }

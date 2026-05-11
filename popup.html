@@ -10,31 +10,31 @@
   <h1>Label printer</h1>
 
   <form id="settings">
-    <fieldset>
-      <legend>Label</legend>
+    <fieldset class="main">
       <label>Width (mm) <input type="number" id="widthMm" min="5" max="80" step="0.5" /></label>
       <label>Height (mm) <input type="number" id="heightMm" min="5" max="200" step="0.5" /></label>
-      <label>Gap (mm) <input type="number" id="gapMm" min="0" max="10" step="0.5" /></label>
-    </fieldset>
-    <fieldset>
-      <legend>Printer</legend>
-      <label>Density <input type="number" id="density" min="1" max="15" /></label>
-      <label>Speed <input type="number" id="speed" min="1" max="10" /></label>
-      <label>Baud
-        <select id="baud">
-          <option value="9600">9600</option>
-          <option value="19200">19200</option>
-          <option value="38400">38400</option>
-          <option value="57600">57600</option>
-          <option value="115200">115200</option>
-        </select>
-      </label>
-    </fieldset>
-    <fieldset>
-      <legend>Render</legend>
-      <label>Threshold <input type="number" id="threshold" min="0" max="255" /></label>
       <label>Copies <input type="number" id="copies" min="1" max="99" /></label>
     </fieldset>
+
+    <details class="advanced">
+      <summary>Advanced</summary>
+      <div class="advanced-body">
+        <label>Gap (mm) <input type="number" id="gapMm" min="0" max="10" step="0.5" /></label>
+        <label>Density <input type="number" id="density" min="1" max="15" /></label>
+        <label>Speed <input type="number" id="speed" min="1" max="10" /></label>
+        <label>Baud
+          <select id="baud">
+            <option value="9600">9600</option>
+            <option value="19200">19200</option>
+            <option value="38400">38400</option>
+            <option value="57600">57600</option>
+            <option value="115200">115200</option>
+          </select>
+        </label>
+        <label>Threshold <input type="number" id="threshold" min="0" max="255" /></label>
+        <button id="changePort" type="button" hidden>Change port</button>
+      </div>
+    </details>
   </form>
 
   <div class="actions">
@@ -43,7 +43,11 @@
   </div>
 
   <p id="status">Initialising…</p>
-  <img id="preview" alt="" />
+
+  <div class="preview">
+    <img id="preview" alt="Label preview" />
+    <p id="previewMsg"></p>
+  </div>
 </main>
 <script type="module" src="/src/popup.ts"></script>
 </body>

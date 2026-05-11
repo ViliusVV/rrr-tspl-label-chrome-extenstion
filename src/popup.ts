@@ -3,7 +3,7 @@ import { rasterize } from './raster';
 import { buildTspl } from './tspl';
 import { getCurrentPort, sendBytes } from './serial';
 import { DEFAULTS, loadSettings, saveSettings } from './settings';
-import type { CaptureResult, Settings } from './types';
+import type { CaptureResult, RasterResult, Settings } from './types';
 
 const DOTS_PER_MM = 8;
 
@@ -26,15 +26,26 @@ const fields: Record<keyof Settings, HTMLInputElement | HTMLSelectElement> = {
 
 const statusEl = $('status');
 const previewEl = $<HTMLImageElement>('preview');
+const previewMsgEl = $('previewMsg');
 const connectBtn = $<HTMLButtonElement>('connect');
+const changePortBtn = $<HTMLButtonElement>('changePort');
 const printBtn = $<HTMLButtonElement>('print');
 
 let port: SerialPort | null = null;
 let saveTimer: number | undefined;
+let previewTimer: number | undefined;
+let cachedCapture: CaptureResult | null = null;
+let lastRaster: RasterResult | null = null;
+let previewSeq = 0;
 
 function setStatus(text: string, isError = false): void {
   statusEl.textContent = text;
   statusEl.classList.toggle('error', isError);
+}
+
+function setPreviewMsg(text: string, isError = false): void {
+  previewMsgEl.textContent = text;
+  previewMsgEl.classList.toggle('error', isError);
 }
 
 function populateForm(s: Settings): void {
@@ -62,6 +73,74 @@ function readForm(): Settings {
   };
 }
 
+async function captureFromActiveTab(): Promise<CaptureResult> {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tabId = tabs[0]?.id;
+    if (!tabId) return { ok: false, error: 'No active tab' };
+    const injection = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: captureSvg,
+    });
+    const result = injection[0]?.result as CaptureResult | undefined;
+    return result ?? { ok: false, error: 'Capture script returned no result' };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+async function refreshPreview(settings: Settings): Promise<void> {
+  const seq = ++previewSeq;
+
+  // Capture only if we don't already have a successful capture cached.
+  if (!cachedCapture || !cachedCapture.ok) {
+    cachedCapture = await captureFromActiveTab();
+    if (seq !== previewSeq) return;
+  }
+
+  if (!cachedCapture.ok) {
+    previewEl.removeAttribute('src');
+    lastRaster = null;
+    setPreviewMsg(cachedCapture.error, true);
+    return;
+  }
+
+  const labelDotsW = Math.round(settings.widthMm * DOTS_PER_MM);
+  const labelDotsH = Math.round(settings.heightMm * DOTS_PER_MM);
+  if (!labelDotsW || !labelDotsH) {
+    setPreviewMsg('Enter valid label width and height.', true);
+    return;
+  }
+
+  try {
+    const raster = await rasterize({
+      svgString: cachedCapture.svgString,
+      svgWidth: cachedCapture.svgWidth,
+      svgHeight: cachedCapture.svgHeight,
+      labelDotsW,
+      labelDotsH,
+      threshold: settings.threshold,
+    });
+    if (seq !== previewSeq) return;
+    lastRaster = raster;
+    previewEl.src = raster.previewDataUrl;
+    setPreviewMsg(
+      `Preview: ${cachedCapture.svgWidth}x${cachedCapture.svgHeight} → ${labelDotsW}x${labelDotsH} dots`,
+    );
+  } catch (e) {
+    if (seq !== previewSeq) return;
+    setPreviewMsg(`Rasterise failed: ${(e as Error).message}`, true);
+    lastRaster = null;
+  }
+}
+
+function schedulePreview(): void {
+  if (previewTimer !== undefined) clearTimeout(previewTimer);
+  previewTimer = window.setTimeout(() => {
+    refreshPreview(readForm()).catch((e) => console.error('refreshPreview failed', e));
+  }, 200);
+}
+
 function scheduleSave(): void {
   if (saveTimer !== undefined) clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => {
@@ -72,20 +151,22 @@ function scheduleSave(): void {
 async function refreshPortState(): Promise<void> {
   port = await getCurrentPort();
   if (port) {
-    connectBtn.textContent = 'Change port';
+    connectBtn.hidden = true;
+    changePortBtn.hidden = false;
     printBtn.disabled = false;
     setStatus('Printer connected. Ready.');
   } else {
-    connectBtn.textContent = 'Connect printer';
+    connectBtn.hidden = false;
+    changePortBtn.hidden = true;
     printBtn.disabled = true;
     setStatus('Click "Connect printer" to choose a COM port.');
   }
 }
 
 async function onConnect(): Promise<void> {
-  // Open the connect page as a real Chrome tab — the only extension surface where
-  // Chrome will host the Web Serial picker. The popup will dismiss as focus moves
-  // to the new tab; no point updating its status (it won't render in time).
+  // Web Serial picker can only be hosted from a real Chrome tab. The popup
+  // dismisses on focus-loss when the tab opens; status updates here wouldn't
+  // render anyway.
   try {
     await chrome.tabs.create({ url: chrome.runtime.getURL('connect.html') });
   } catch (e) {
@@ -104,31 +185,28 @@ async function onPrint(): Promise<void> {
   await saveSettings(settings);
 
   try {
-    setStatus('Capturing SVG…');
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tabId = tabs[0]?.id;
-    if (!tabId) throw new Error('No active tab');
-
-    const injection = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: captureSvg,
-    });
-    const result = injection[0]?.result as CaptureResult | undefined;
-    if (!result) throw new Error('Capture script returned no result');
-    if (!result.ok) throw new Error(result.error);
+    // Use the already-captured + rasterised preview when it matches current settings.
+    // For correctness, just re-rasterise fresh — settings may have changed since the
+    // last preview tick. The capture is cheap (cached) and rasterise is ~50-100ms.
+    if (!cachedCapture || !cachedCapture.ok) {
+      setStatus('Capturing SVG…');
+      cachedCapture = await captureFromActiveTab();
+      if (!cachedCapture.ok) throw new Error(cachedCapture.error);
+    }
 
     const labelDotsW = Math.round(settings.widthMm * DOTS_PER_MM);
     const labelDotsH = Math.round(settings.heightMm * DOTS_PER_MM);
 
-    setStatus(`Rasterising ${result.svgWidth}x${result.svgHeight} -> ${labelDotsW}x${labelDotsH}…`);
+    setStatus(`Rasterising ${cachedCapture.svgWidth}x${cachedCapture.svgHeight} -> ${labelDotsW}x${labelDotsH}…`);
     const raster = await rasterize({
-      svgString: result.svgString,
-      svgWidth: result.svgWidth,
-      svgHeight: result.svgHeight,
+      svgString: cachedCapture.svgString,
+      svgWidth: cachedCapture.svgWidth,
+      svgHeight: cachedCapture.svgHeight,
       labelDotsW,
       labelDotsH,
       threshold: settings.threshold,
     });
+    lastRaster = raster;
     previewEl.src = raster.previewDataUrl;
 
     const bytes = buildTspl(raster, {
@@ -154,15 +232,31 @@ async function onPrint(): Promise<void> {
 async function init(): Promise<void> {
   populateForm(await loadSettings().catch(() => DEFAULTS));
   for (const el of Object.values(fields)) {
-    el.addEventListener('change', scheduleSave);
-    el.addEventListener('input', scheduleSave);
+    el.addEventListener('change', () => {
+      scheduleSave();
+      schedulePreview();
+    });
+    el.addEventListener('input', () => {
+      scheduleSave();
+      schedulePreview();
+    });
   }
   connectBtn.addEventListener('click', onConnect);
+  changePortBtn.addEventListener('click', onConnect);
   printBtn.addEventListener('click', onPrint);
+
   await refreshPortState();
+
+  // Always-visible preview: kick off capture+rasterise on popup open.
+  setPreviewMsg('Loading preview…');
+  refreshPreview(readForm()).catch((e) => console.error('initial preview failed', e));
 }
 
 init().catch((e) => {
   setStatus(`Init failed: ${(e as Error).message}`, true);
   console.error(e);
 });
+
+// Silence unused-variable warnings for state we hold for future use (e.g., to
+// avoid re-rasterising on Print when settings haven't changed since preview).
+void lastRaster;
