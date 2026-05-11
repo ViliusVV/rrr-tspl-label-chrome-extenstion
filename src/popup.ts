@@ -83,23 +83,14 @@ async function refreshPortState(): Promise<void> {
 }
 
 async function onConnect(): Promise<void> {
-  // MV3 toolbar popups can't host the Web Serial picker — Chrome rejects with
-  // NotFoundError because the transient popup is not a top-level browsing context
-  // it can anchor the chooser dialog to. Workaround: open a dedicated extension
-  // window, let the user pick the port from there. The granted permission persists,
-  // so reopening this popup picks the port up via navigator.serial.getPorts().
+  // Open the connect page as a real Chrome tab — the most permissive surface for
+  // Web Serial's permission picker. Earlier attempts (popup, chrome.windows.create
+  // popup-type window) both saw Chrome reject the picker silently.
   try {
-    await chrome.windows.create({
-      url: chrome.runtime.getURL('connect.html'),
-      type: 'popup',
-      width: 380,
-      height: 220,
-    });
-    // This popup will dismiss as focus moves to the new window. Status update is
-    // a courtesy in case it survives briefly.
-    setStatus('Pick the COM port in the window that just opened, then reopen this popup.');
+    await chrome.tabs.create({ url: chrome.runtime.getURL('connect.html') });
+    setStatus('Pick the COM port in the tab that just opened, then reopen this popup.');
   } catch (e) {
-    setStatus(`Could not open connect window: ${(e as Error).message}`, true);
+    setStatus(`Could not open connect tab: ${(e as Error).message}`, true);
     console.error(e);
   }
 }
