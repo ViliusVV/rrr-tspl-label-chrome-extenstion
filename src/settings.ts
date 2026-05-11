@@ -1,3 +1,4 @@
+import { detectBrowserLang } from './i18n';
 import type { Settings } from './types';
 
 export const DEFAULTS: Settings = {
@@ -15,6 +16,7 @@ export const DEFAULTS: Settings = {
   manualY: 0,
   manualWidth: 1,
   manualHeight: 1,
+  language: detectBrowserLang(),
 };
 
 const KEY = 'settings';

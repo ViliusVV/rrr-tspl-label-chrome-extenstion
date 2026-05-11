@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-i18n-title="connect_title">
 <head>
   <meta charset="UTF-8" />
   <title>Connect printer</title>
@@ -64,9 +64,9 @@
 </head>
 <body>
 <main>
-  <h1>Connect your printer</h1>
-  <p>Click below, then pick your printer's COM port from the system dialog. The tab will close itself after you connect.</p>
-  <button id="pick" type="button">Pick port</button>
+  <h1 data-i18n="connect_title">Connect your printer</h1>
+  <p data-i18n="connect_instructions">Click below, then pick your printer's COM port from the system dialog. The tab will close itself after you connect.</p>
+  <button id="pick" type="button" data-i18n="pick_port">Pick port</button>
   <p id="msg"></p>
 </main>
 <script type="module" src="/src/connect.ts"></script>

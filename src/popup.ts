@@ -1,5 +1,6 @@
 import interact from 'interactjs';
 import { captureSvg } from './capture';
+import { applyI18nToDom, setLang, t, type Lang } from './i18n';
 import { manualDefaultsFromAutoFit, rasterize } from './raster';
 import { buildTspl } from './tspl';
 import { getCurrentPort, sendBytes } from './serial';
@@ -27,6 +28,7 @@ const numericFields = {
   copies: $<HTMLInputElement>('copies'),
 } as const;
 const autoFitField = $<HTMLInputElement>('autoFit');
+const languageField = $<HTMLSelectElement>('language');
 
 const statusEl = $('status');
 const previewMsgEl = $('previewMsg');
@@ -347,7 +349,7 @@ async function captureFromActiveTab(): Promise<CaptureResult> {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tabId = tabs[0]?.id;
-    if (!tabId) return { ok: false, error: 'No active tab' };
+    if (!tabId) return { ok: false, error: t('error_no_active_tab') };
     const injection = await chrome.scripting.executeScript({
       target: { tabId },
       func: captureSvg,
@@ -386,7 +388,7 @@ async function refreshPreview(): Promise<void> {
   const labelDotsW = Math.round(currentSettings.widthMm * DOTS_PER_MM);
   const labelDotsH = Math.round(currentSettings.heightMm * DOTS_PER_MM);
   if (!labelDotsW || !labelDotsH) {
-    setPreviewMsg('Enter valid label width and height.', true);
+    setPreviewMsg(t('preview_invalid_dim'), true);
     return;
   }
 
@@ -403,11 +405,17 @@ async function refreshPreview(): Promise<void> {
     if (seq !== previewSeq) return;
     previewRasterEl.src = raster.previewDataUrl;
     setPreviewMsg(
-      `Preview: ${cachedCapture.svgWidth}x${cachedCapture.svgHeight} → ${labelDotsW}x${labelDotsH} dots${currentSettings.autoFit ? ' (auto-fit)' : ' (manual)'}`,
+      t('preview_info', {
+        svgW: cachedCapture.svgWidth,
+        svgH: cachedCapture.svgHeight,
+        dotsW: labelDotsW,
+        dotsH: labelDotsH,
+        mode: currentSettings.autoFit ? t('preview_mode_auto') : t('preview_mode_manual'),
+      }),
     );
   } catch (e) {
     if (seq !== previewSeq) return;
-    setPreviewMsg(`Rasterise failed: ${(e as Error).message}`, true);
+    setPreviewMsg(t('preview_rasterise_failed', { message: (e as Error).message }), true);
   }
 }
 
@@ -449,6 +457,7 @@ function populateForm(s: Settings): void {
   numericFields.threshold.value = String(s.threshold);
   numericFields.copies.value = String(s.copies);
   autoFitField.checked = s.autoFit;
+  languageField.value = s.language;
 }
 
 function readFormInto(s: Settings): Settings {
@@ -465,6 +474,7 @@ function readFormInto(s: Settings): Settings {
     threshold: num('threshold'),
     copies: num('copies'),
     autoFit: autoFitField.checked,
+    language: languageField.value as Lang,
   };
 }
 
@@ -476,6 +486,17 @@ function onFormChange(): void {
   applyFrameSize();
   scheduleSave();
   schedulePreview();
+}
+
+function onLanguageChange(): void {
+  const next = languageField.value as Lang;
+  if (next === currentSettings.language) return;
+  currentSettings.language = next;
+  setLang(next);
+  applyI18nToDom();
+  refreshPortState().catch((e) => console.error('refreshPortState failed', e));
+  schedulePreview();
+  saveSettings(currentSettings).catch((e) => console.error('saveSettings failed', e));
 }
 
 function onAutoFitToggle(): void {
@@ -545,12 +566,12 @@ async function refreshPortState(): Promise<void> {
     connectBtn.hidden = true;
     changePortBtn.hidden = false;
     printBtn.disabled = false;
-    setStatus('Printer connected. Ready.');
+    setStatus(t('status_connected'));
   } else {
     connectBtn.hidden = false;
     changePortBtn.hidden = true;
     printBtn.disabled = true;
-    setStatus('Click "Connect printer" to choose a COM port.');
+    setStatus(t('status_click_connect'));
   }
 }
 
@@ -558,14 +579,14 @@ async function onConnect(): Promise<void> {
   try {
     await chrome.tabs.create({ url: chrome.runtime.getURL('connect.html') });
   } catch (e) {
-    setStatus(`Could not open connect tab: ${(e as Error).message}`, true);
+    setStatus(t('status_connect_tab_failed', { message: (e as Error).message }), true);
     console.error(e);
   }
 }
 
 async function onPrint(): Promise<void> {
   if (!port) {
-    setStatus('No printer connected', true);
+    setStatus(t('status_no_port'), true);
     return;
   }
   printBtn.disabled = true;
@@ -573,7 +594,7 @@ async function onPrint(): Promise<void> {
 
   try {
     if (!cachedCapture || !cachedCapture.ok) {
-      setStatus('Capturing SVG…');
+      setStatus(t('status_capturing'));
       cachedCapture = await captureFromActiveTab();
       if (!cachedCapture.ok) throw new Error(cachedCapture.error);
     }
@@ -581,7 +602,14 @@ async function onPrint(): Promise<void> {
     const labelDotsW = Math.round(currentSettings.widthMm * DOTS_PER_MM);
     const labelDotsH = Math.round(currentSettings.heightMm * DOTS_PER_MM);
 
-    setStatus(`Rasterising ${cachedCapture.svgWidth}x${cachedCapture.svgHeight} -> ${labelDotsW}x${labelDotsH}…`);
+    setStatus(
+      t('status_rasterising', {
+        svgW: cachedCapture.svgWidth,
+        svgH: cachedCapture.svgHeight,
+        dotsW: labelDotsW,
+        dotsH: labelDotsH,
+      }),
+    );
     const raster = await rasterize({
       svgString: cachedCapture.svgString,
       svgWidth: cachedCapture.svgWidth,
@@ -602,9 +630,9 @@ async function onPrint(): Promise<void> {
       copies: currentSettings.copies,
     });
 
-    setStatus(`Sending ${bytes.length} bytes to printer…`);
+    setStatus(t('status_sending', { n: bytes.length }));
     await sendBytes(port, currentSettings.baud, bytes);
-    setStatus(`Sent ${bytes.length} bytes. Done.`);
+    setStatus(t('status_sent', { n: bytes.length }));
   } catch (e) {
     setStatus((e as Error).message, true);
     console.error(e);
@@ -617,6 +645,8 @@ async function onPrint(): Promise<void> {
 
 async function init(): Promise<void> {
   currentSettings = await loadSettings().catch(() => DEFAULTS);
+  setLang(currentSettings.language);
+  applyI18nToDom();
   populateForm(currentSettings);
   applyFrameSize();
 
@@ -625,6 +655,7 @@ async function init(): Promise<void> {
     el.addEventListener('input', onFormChange);
   }
   autoFitField.addEventListener('change', onAutoFitToggle);
+  languageField.addEventListener('change', onLanguageChange);
   rotateBtn.addEventListener('click', onRotateClick);
   resetViewBtn.addEventListener('click', resetViewport);
   connectBtn.addEventListener('click', onConnect);
@@ -642,7 +673,7 @@ async function init(): Promise<void> {
 
   await refreshPortState();
 
-  setPreviewMsg('Loading preview…');
+  setPreviewMsg(t('preview_loading'));
   await refreshPreview();
   // refreshPreview captures the SVG (when first run) → we now know its aspect.
   // Snap manualHeight so the wrapper matches what rasterise produces.
@@ -651,6 +682,6 @@ async function init(): Promise<void> {
 }
 
 init().catch((e) => {
-  setStatus(`Init failed: ${(e as Error).message}`, true);
+  setStatus(t('status_init_failed', { message: (e as Error).message }), true);
   console.error(e);
 });

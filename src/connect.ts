@@ -1,3 +1,6 @@
+import { applyI18nToDom, setLang, t } from './i18n';
+import { loadSettings } from './settings';
+
 const btn = document.getElementById('pick') as HTMLButtonElement;
 const msg = document.getElementById('msg') as HTMLParagraphElement;
 
@@ -30,18 +33,18 @@ btn.addEventListener('click', async () => {
         }
       }
     }
-    setMsg('Connected. Closing tab…', 'ok');
+    setMsg(t('connect_success'), 'ok');
     setTimeout(() => {
       try {
         window.close();
       } catch {
-        setMsg('Connected. You can close this tab.', 'ok');
+        setMsg(t('connect_success_no_close'), 'ok');
       }
     }, 900);
   } catch (e) {
     const err = e as { name?: string; message?: string };
     if (err.name === 'NotFoundError') {
-      setMsg('No port selected. Click "Pick port" to try again.', 'error');
+      setMsg(t('connect_cancelled'), 'error');
     } else {
       setMsg(`${err.name ?? 'Error'}: ${err.message ?? String(e)}`, 'error');
     }
@@ -50,3 +53,14 @@ btn.addEventListener('click', async () => {
 });
 
 btn.focus();
+
+// Apply the saved language to this page's static text. If load fails, falls back to
+// the default 'en'.
+loadSettings()
+  .then((s) => {
+    setLang(s.language);
+    applyI18nToDom();
+  })
+  .catch(() => {
+    applyI18nToDom();
+  });

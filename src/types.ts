@@ -13,6 +13,7 @@ export interface Settings {
   manualY: number;   // normalised fraction of label height
   manualWidth: number;  // normalised — SVG effective width as fraction of label width
   manualHeight: number; // normalised — SVG effective height as fraction of label height
+  language: 'en' | 'lt'; // popup UI language
 }
 
 export interface ManualTransform {
