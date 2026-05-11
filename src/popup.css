@@ -1,3 +1,13 @@
-body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; min-width: 320px; }
+body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; min-width: 340px; }
 h1 { font-size: 1rem; margin: 0 0 8px; }
-#status { font-size: 0.85rem; color: #444; }
+fieldset { border: 1px solid #ddd; border-radius: 4px; margin: 0 0 8px; padding: 6px 8px; }
+legend { font-size: 0.75rem; color: #666; padding: 0 4px; }
+label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.85rem; margin: 4px 0; }
+input[type="number"], select { width: 90px; }
+.actions { display: flex; gap: 8px; margin: 8px 0; }
+button { padding: 6px 10px; font-size: 0.85rem; cursor: pointer; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+#status { font-size: 0.8rem; color: #444; margin: 8px 0 4px; min-height: 1.2em; }
+#status.error { color: #b00020; }
+#preview { display: block; max-width: 100%; image-rendering: pixelated; border: 1px solid #eee; background: #fafafa; }
+#preview:not([src]) { display: none; }
