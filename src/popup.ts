@@ -353,6 +353,7 @@ async function captureFromActiveTab(): Promise<CaptureResult> {
     const injection = await chrome.scripting.executeScript({
       target: { tabId },
       func: captureSvg,
+      injectImmediately: true,
     });
     const result = injection[0]?.result as CaptureResult | undefined;
     return result ?? { ok: false, error: 'Capture script returned no result' };
@@ -374,7 +375,9 @@ function currentManualTransform(): ManualTransform {
 async function refreshPreview(): Promise<void> {
   const seq = ++previewSeq;
   if (!cachedCapture || !cachedCapture.ok) {
+    console.time('[preview] capture');
     cachedCapture = await captureFromActiveTab();
+    console.timeEnd('[preview] capture');
     if (seq !== previewSeq) return;
     if (cachedCapture.ok) updateManualSvgImage();
   }
@@ -393,6 +396,7 @@ async function refreshPreview(): Promise<void> {
   }
 
   try {
+    console.time('[preview] rasterize');
     const raster = await rasterize({
       svgString: cachedCapture.svgString,
       svgWidth: cachedCapture.svgWidth,
@@ -402,6 +406,7 @@ async function refreshPreview(): Promise<void> {
       threshold: currentSettings.threshold,
       manual: currentSettings.autoFit ? undefined : currentManualTransform(),
     });
+    console.timeEnd('[preview] rasterize');
     if (seq !== previewSeq) return;
     previewRasterEl.src = raster.previewDataUrl;
     setPreviewMsg(
