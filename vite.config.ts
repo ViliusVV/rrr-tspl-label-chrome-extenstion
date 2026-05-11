@@ -9,6 +9,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         popup: resolve(__dirname, 'popup.html'),
+        connect: resolve(__dirname, 'connect.html'),
       },
     },
   },

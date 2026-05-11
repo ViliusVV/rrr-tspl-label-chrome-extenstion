@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Connect printer</title>
+  <link rel="stylesheet" href="/src/popup.css" />
+  <style>
+    body { min-width: 320px; }
+    main { padding: 4px 0; }
+    p { font-size: 0.85rem; color: #444; margin: 0 0 10px; }
+    #msg { min-height: 1.2em; }
+    #msg.error { color: #b00020; }
+    #msg.ok { color: #1b5e20; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Connect printer</h1>
+  <p>Click the button below, then pick your printer's COM port from the system dialog.</p>
+  <button id="pick" type="button">Pick port</button>
+  <p id="msg"></p>
+</main>
+<script type="module" src="/src/connect.ts"></script>
+</body>
+</html>

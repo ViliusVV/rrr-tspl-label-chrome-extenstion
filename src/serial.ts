@@ -8,22 +8,17 @@ export async function getOrRequestPort(opts: { prompt: boolean }): Promise<Seria
   if (!('serial' in navigator)) {
     throw new Error('Web Serial is not available in this browser');
   }
-  if (opts.prompt) {
-    // Diagnostic logging — remove once Connect works end-to-end.
-    console.log('[serial] calling navigator.serial.requestPort');
-    try {
-      const port = await navigator.serial.requestPort();
-      console.log('[serial] requestPort resolved with port:', port);
-      return port;
-    } catch (e) {
-      const err = e as { name?: string; message?: string };
-      console.log('[serial] requestPort rejected — name:', err.name, '| message:', err.message);
-      if (err.name === 'NotFoundError') return null;
-      throw e;
-    }
-  }
+  // The toolbar popup can't host the Web Serial picker (Chrome rejects with
+  // NotFoundError without rendering it), so the prompt path is owned by the
+  // dedicated connect window. Here we only ever return previously-granted ports.
   const existing = await navigator.serial.getPorts();
-  return existing.length > 0 ? existing[0] : null;
+  if (existing.length > 0) return existing[0];
+  if (opts.prompt) {
+    // Caller asked for a prompt but this surface can't host one. Telling the caller
+    // null lets it route the user to the connect window instead.
+    return null;
+  }
+  return null;
 }
 
 export async function sendBytes(

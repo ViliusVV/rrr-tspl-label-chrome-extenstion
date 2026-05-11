@@ -83,17 +83,23 @@ async function refreshPortState(): Promise<void> {
 }
 
 async function onConnect(): Promise<void> {
+  // MV3 toolbar popups can't host the Web Serial picker — Chrome rejects with
+  // NotFoundError because the transient popup is not a top-level browsing context
+  // it can anchor the chooser dialog to. Workaround: open a dedicated extension
+  // window, let the user pick the port from there. The granted permission persists,
+  // so reopening this popup picks the port up via navigator.serial.getPorts().
   try {
-    port = await getOrRequestPort({ prompt: true });
-    if (!port) {
-      setStatus('No printer selected', true);
-      return;
-    }
-    connectBtn.style.display = 'none';
-    printBtn.disabled = false;
-    setStatus('Printer connected. Ready.');
+    await chrome.windows.create({
+      url: chrome.runtime.getURL('connect.html'),
+      type: 'popup',
+      width: 380,
+      height: 220,
+    });
+    // This popup will dismiss as focus moves to the new window. Status update is
+    // a courtesy in case it survives briefly.
+    setStatus('Pick the COM port in the window that just opened, then reopen this popup.');
   } catch (e) {
-    setStatus(`Connect failed: ${(e as Error).message}`, true);
+    setStatus(`Could not open connect window: ${(e as Error).message}`, true);
     console.error(e);
   }
 }
