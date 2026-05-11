@@ -132,6 +132,27 @@ function cssRectToManual(left: number, top: number, width: number, height: numbe
   };
 }
 
+// Force manualHeight to match the SVG's effective aspect (after any rotation) at
+// the current label aspect. Defensive: keeps the wrapper rect visually equal to
+// what rasterise will actually produce on print, even if stale settings or label-
+// dimension changes pushed the ratio off.
+function snapManualHeightToAspect(): void {
+  if (!cachedCapture || !cachedCapture.ok) return;
+  const effW = currentSettings.manualRotate
+    ? cachedCapture.svgHeight
+    : cachedCapture.svgWidth;
+  const effH = currentSettings.manualRotate
+    ? cachedCapture.svgWidth
+    : cachedCapture.svgHeight;
+  // wrapperAspect_css = (manualHeight * labelH) / (manualWidth * labelW)
+  //                   = (manualHeight / manualWidth) * (heightMm / widthMm)
+  // want wrapperAspect_css = effH / effW
+  //   => manualHeight = manualWidth * (effH / effW) * (widthMm / heightMm)
+  const labelAspect = currentSettings.heightMm / currentSettings.widthMm;
+  currentSettings.manualHeight =
+    (currentSettings.manualWidth * (effH / effW)) / labelAspect;
+}
+
 // ---------- SVG image source ----------
 
 function svgStringToDataUrl(s: string): string {
@@ -155,6 +176,9 @@ function installInteractHandlers(): void {
   interact(manualSvgWrapperEl)
     .draggable({
       listeners: {
+        start() {
+          previewWorkareaEl.classList.add('editing');
+        },
         move(event) {
           const newLeft = manualSvgWrapperEl.offsetLeft + event.dx;
           const newTop = manualSvgWrapperEl.offsetTop + event.dy;
@@ -171,6 +195,9 @@ function installInteractHandlers(): void {
           scheduleSave();
           schedulePreview();
         },
+        end() {
+          previewWorkareaEl.classList.remove('editing');
+        },
       },
     })
     .resizable({
@@ -181,6 +208,9 @@ function installInteractHandlers(): void {
         interact.modifiers.restrictSize({ min: { width: 24, height: 12 } }),
       ],
       listeners: {
+        start() {
+          previewWorkareaEl.classList.add('editing');
+        },
         move(event) {
           const newWidth = event.rect.width;
           const newHeight = event.rect.height;
@@ -198,6 +228,9 @@ function installInteractHandlers(): void {
           currentSettings.manualHeight = m.manualHeight;
           scheduleSave();
           schedulePreview();
+        },
+        end() {
+          previewWorkareaEl.classList.remove('editing');
         },
       },
     });
@@ -347,6 +380,7 @@ function readFormInto(s: Settings): Settings {
 
 function onFormChange(): void {
   currentSettings = readFormInto(currentSettings);
+  snapManualHeightToAspect();
   applyFrameSize();
   scheduleSave();
   schedulePreview();
@@ -382,6 +416,9 @@ function onAutoFitToggle(): void {
     }
   }
 
+  // Stale stored values from before manualHeight existed (or after label dim
+  // changes) can leave the wrapper at the wrong aspect — snap it back to SVG.
+  snapManualHeightToAspect();
   setManualMode(!currentSettings.autoFit);
   scheduleSave();
   schedulePreview();
@@ -400,6 +437,9 @@ function onRotateClick(): void {
   currentSettings.manualWidth = newWidth;
   currentSettings.manualHeight = newHeight;
   currentSettings.manualRotate = !currentSettings.manualRotate;
+  // Defensive: after the rotate, force aspect to the rotated SVG aspect so the
+  // wrapper rect matches the rasterised output exactly.
+  snapManualHeightToAspect();
   applyManualLayoutFromSettings();
   scheduleSave();
   schedulePreview();
@@ -502,6 +542,9 @@ async function init(): Promise<void> {
 
   setPreviewMsg('Loading preview…');
   await refreshPreview();
+  // refreshPreview captures the SVG (when first run) → we now know its aspect.
+  // Snap manualHeight so the wrapper matches what rasterise produces.
+  snapManualHeightToAspect();
   setManualMode(!currentSettings.autoFit);
 }
 

@@ -86,12 +86,19 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   height: 100%;
   image-rendering: pixelated;
 }
-.preview-workarea.manual .preview-raster { opacity: 0.45; }
+/* Idle manual mode: raster full opacity (so user sees what will print), SVG image
+   hidden behind the wrapper outline. The wrapper outline itself stays visible so
+   the user has something to grab to start dragging. */
+.preview-workarea.manual .manual-svg-img { visibility: hidden; }
+/* Active edit (drag or resize): hide the raster, reveal the SVG content. No more
+   double-ghosting. */
+.preview-workarea.manual.editing .preview-raster { visibility: hidden; }
+.preview-workarea.manual.editing .manual-svg-img { visibility: visible; }
 
 .manual-svg-wrapper {
   position: absolute;
   outline: 2px dashed #2563eb;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(37, 99, 235, 0.06);
   cursor: move;
   touch-action: none;
   box-sizing: border-box;

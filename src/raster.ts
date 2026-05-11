@@ -82,8 +82,14 @@ export async function rasterize(input: RasterInput): Promise<RasterResult> {
 
   if (manual) {
     // Manual transform: user-controlled scale + offset + rotation.
+    // drawW is taken from manual.width; drawH is DERIVED from drawW and the SVG's
+    // effective aspect ratio (after any 90° rotation). manual.height is only used
+    // by the UI for wrapper layout; it must never override SVG aspect at raster
+    // time or QR-style content gets stretched.
+    const effW = manual.rotate ? svgHeight : svgWidth;
+    const effH = manual.rotate ? svgWidth : svgHeight;
     const drawW = manual.width * labelDotsW;
-    const drawH = manual.height * labelDotsH;
+    const drawH = drawW * (effH / effW);
     const dx = manual.x * labelDotsW;
     const dy = manual.y * labelDotsH;
 
