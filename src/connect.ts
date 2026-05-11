@@ -8,8 +8,9 @@ function setMsg(text: string, kind: 'ok' | 'error' | '' = ''): void {
 }
 
 // Captured at load so the click handler can do its work without an intervening await.
-let previouslyGranted: SerialPort[] = [];
-navigator.serial.getPorts().then((p) => {
+// SerialPort isn't reliably typed in lib.dom, so use any[] here.
+let previouslyGranted: any[] = [];
+navigator.serial.getPorts().then((p: any[]) => {
   previouslyGranted = p;
 });
 

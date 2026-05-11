@@ -1,7 +1,7 @@
 import { captureSvg } from './capture';
 import { rasterize } from './raster';
 import { buildTspl } from './tspl';
-import { getOrRequestPort, sendBytes } from './serial';
+import { getCurrentPort, sendBytes } from './serial';
 import { DEFAULTS, loadSettings, saveSettings } from './settings';
 import type { CaptureResult, Settings } from './types';
 
@@ -70,7 +70,7 @@ function scheduleSave(): void {
 }
 
 async function refreshPortState(): Promise<void> {
-  port = await getOrRequestPort({ prompt: false });
+  port = await getCurrentPort();
   if (port) {
     connectBtn.textContent = 'Change port';
     printBtn.disabled = false;

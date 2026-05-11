@@ -4,18 +4,17 @@ declare global {
 }
 export {};
 
-export async function getOrRequestPort(opts: { prompt: boolean }): Promise<SerialPort | null> {
+export async function getCurrentPort(): Promise<SerialPort | null> {
   if (!('serial' in navigator)) {
     throw new Error('Web Serial is not available in this browser');
   }
-  // The toolbar popup can't host the Web Serial picker (Chrome rejects with
-  // NotFoundError without rendering it), so the prompt path is owned by the
-  // dedicated connect tab. Here we only ever return previously-granted ports.
+  // The Web Serial picker can't be hosted from the toolbar popup (Chrome rejects
+  // it with NotFoundError without rendering UI), so the prompt flow is owned by
+  // the dedicated connect tab. This function only looks up already-granted ports.
   // Prefer the most-recently-granted port — the connect tab forgets old ports
   // after a successful re-pick, but this is defensive in case forget() failed.
   const existing = await navigator.serial.getPorts();
   if (existing.length > 0) return existing[existing.length - 1];
-  // opts.prompt is honoured by the connect tab, not here. Return null either way.
   return null;
 }
 
