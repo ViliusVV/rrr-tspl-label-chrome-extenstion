@@ -7,11 +7,28 @@ function setMsg(text: string, kind: 'ok' | 'error' | '' = ''): void {
   if (kind) msg.classList.add(kind);
 }
 
+// Captured at load so the click handler can do its work without an intervening await.
+let previouslyGranted: SerialPort[] = [];
+navigator.serial.getPorts().then((p) => {
+  previouslyGranted = p;
+});
+
 btn.addEventListener('click', async () => {
   setMsg('');
   btn.disabled = true;
   try {
-    await navigator.serial.requestPort();
+    const newPort = await navigator.serial.requestPort();
+    // Revoke permission on any previously-granted ports that aren't the newly-picked
+    // one, so we don't accumulate zombie grants across re-picks.
+    for (const old of previouslyGranted) {
+      if (old !== newPort) {
+        try {
+          await old.forget();
+        } catch (e) {
+          console.warn('[connect] forget() failed for stale port:', e);
+        }
+      }
+    }
     setMsg('Connected. Closing tab…', 'ok');
     setTimeout(() => {
       try {

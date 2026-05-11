@@ -10,14 +10,12 @@ export async function getOrRequestPort(opts: { prompt: boolean }): Promise<Seria
   }
   // The toolbar popup can't host the Web Serial picker (Chrome rejects with
   // NotFoundError without rendering it), so the prompt path is owned by the
-  // dedicated connect window. Here we only ever return previously-granted ports.
+  // dedicated connect tab. Here we only ever return previously-granted ports.
+  // Prefer the most-recently-granted port — the connect tab forgets old ports
+  // after a successful re-pick, but this is defensive in case forget() failed.
   const existing = await navigator.serial.getPorts();
-  if (existing.length > 0) return existing[0];
-  if (opts.prompt) {
-    // Caller asked for a prompt but this surface can't host one. Telling the caller
-    // null lets it route the user to the connect window instead.
-    return null;
-  }
+  if (existing.length > 0) return existing[existing.length - 1];
+  // opts.prompt is honoured by the connect tab, not here. Return null either way.
   return null;
 }
 

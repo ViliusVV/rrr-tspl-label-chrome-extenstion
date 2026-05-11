@@ -72,11 +72,11 @@ function scheduleSave(): void {
 async function refreshPortState(): Promise<void> {
   port = await getOrRequestPort({ prompt: false });
   if (port) {
-    connectBtn.style.display = 'none';
+    connectBtn.textContent = 'Change port';
     printBtn.disabled = false;
     setStatus('Printer connected. Ready.');
   } else {
-    connectBtn.style.display = '';
+    connectBtn.textContent = 'Connect printer';
     printBtn.disabled = true;
     setStatus('Click "Connect printer" to choose a COM port.');
   }
