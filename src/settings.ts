@@ -1,7 +1,7 @@
 import type { Settings } from './types';
 
 export const DEFAULTS: Settings = {
-  widthMm: 40,
+  widthMm: 80,
   heightMm: 30,
   gapMm: 2,
   density: 8,
@@ -9,6 +9,11 @@ export const DEFAULTS: Settings = {
   baud: 9600,
   threshold: 128,
   copies: 1,
+  autoFit: true,
+  manualRotate: false,
+  manualX: 0,
+  manualY: 0,
+  manualWidth: 1,
 };
 
 const KEY = 'settings';

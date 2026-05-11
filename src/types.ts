@@ -7,6 +7,18 @@ export interface Settings {
   baud: number;
   threshold: number; // 0-255 luma cutoff
   copies: number;    // >= 1
+  autoFit: boolean;  // true = auto rotate/scale/center; false = use manual transform
+  manualRotate: boolean; // 90° rotation in manual mode
+  manualX: number;   // normalised [-..] fraction of label width
+  manualY: number;   // normalised fraction of label height
+  manualWidth: number; // normalised fraction of label width (height derived from SVG aspect)
+}
+
+export interface ManualTransform {
+  rotate: boolean;
+  x: number;     // normalised [0..1] (fraction of label width) — can fall outside [0,1] when cropping
+  y: number;     // normalised [0..1] (fraction of label height)
+  width: number; // normalised — SVG effective width as fraction of label width
 }
 
 export type CaptureResult =
@@ -20,6 +32,7 @@ export interface RasterInput {
   labelDotsW: number;
   labelDotsH: number;
   threshold: number;
+  manual?: ManualTransform; // when present, skip auto-fit and use this transform
 }
 
 export interface RasterResult {
